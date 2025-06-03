@@ -22,7 +22,7 @@ def load_sql_magic(connection):
         raise RuntimeError("Diese Funktion kann nur in einer IPython-Umgebung verwendet werden.")
     
     # Globale Variable im Benutzernamespace für Ergebnisse
-    ip.user_ns['result'] = None
+    ip.user_ns['df'] = None
     
     @register_cell_magic
     def sql(line, cell):
@@ -40,14 +40,54 @@ def load_sql_magic(connection):
         """
         # Nutze den globalen result im Benutzernamespace
         database = line.strip() if line.strip() else None
-        result_df = connection.execute_query(cell, database)
-        ip.user_ns['result'] = result_df
-        return result_df
+        try:
+            result_df = connection.execute_query(cell, database)
+            ip.user_ns['df'] = result_df
+            return result_df
+        except Exception as e:
+            print(f"Fehler bei der Ausführung der SQL-Abfrage: {e}", file=sys.stderr)
+            ip.user_ns['result'] = None
+            return None
     
     # Magic registrieren
     ip.register_magic_function(sql, 'cell')
-    
+
+    # --- Autovervollständigung für %%sql ---
+    def sql_completer(self, event):
+        text = event.line
+        position = event.end_line_pos
+        try:
+            cursor = connection.get_cursor()
+            # Nach FROM: Schemata vorschlagen
+            if text.strip().upper().endswith('FROM'):
+                cursor.execute("SHOW SCHEMAS")
+                return [row[1] for row in cursor.fetchall()]
+            # Nach FROM schema.: Tabellen vorschlagen
+            elif '.' in text and 'FROM' in text.upper():
+                parts = text.upper().split('FROM')[-1].strip().split('.')
+                if len(parts) == 2:
+                    schema = parts[0].strip()
+                    cursor.execute(f"SHOW TABLES IN SCHEMA {schema}")
+                    return [row[1] for row in cursor.fetchall()]
+            # Nach table.: Spalten vorschlagen
+            elif '.' in text:
+                parts = text.strip().split('.')
+                if len(parts) >= 2:
+                    table = parts[-2].split()[-1]
+                    cursor.execute(f"DESCRIBE TABLE {table}")
+                    return [row[0] for row in cursor.fetchall()]
+        except Exception:
+            pass
+        # Standard-SQL-Keywords
+        return [
+            "SELECT", "FROM", "WHERE", "GROUP BY", "ORDER BY", "JOIN", "LEFT JOIN", "INNER JOIN", "LIMIT", "OFFSET"
+        ]
+
+    # Completer für %%sql registrieren
+    if hasattr(ip, 'set_hook'):
+        ip.set_hook('complete_command', sql_completer, re_key='.*%sql.*')
+
     print("SQL-Magic wurde aktiviert. Du kannst jetzt %%sql [database] in Zellen verwenden.")
     print("Das Abfrageergebnis wird in der globalen Variable 'result' gespeichert.")
     
-    return sql
+    return #sql

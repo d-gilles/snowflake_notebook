@@ -33,3 +33,4 @@ ENV/
 config.ini
 settings.json
 .python-version
+.env
