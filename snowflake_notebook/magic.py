@@ -29,7 +29,8 @@ def load_sql_magic(connection):
         """Magic-Kommando, um SQL-Abfragen direkt auszuführen.
         
         Verwende: %%sql [database_name] in einer Zelle, gefolgt von der SQL-Abfrage.
-        Das Ergebnis wird sowohl zurückgegeben als auch in der globalen Variable 'result' gespeichert.
+        Das Ergebnis wird sowohl zurückgegeben als auch in der globalen Variable 'df' gespeichert.
+        Unterstützt F-String-Syntax mit Python-Variablen in geschwungenen Klammern {}.
         
         Args:
             line (str): Die erste Zeile nach %%sql (optional: Datenbankname)
@@ -40,14 +41,50 @@ def load_sql_magic(connection):
         """
         # Nutze den globalen result im Benutzernamespace
         database = line.strip() if line.strip() else None
+        
         try:
-            result_df = connection.execute_query(cell, database)
+            # F-String-ähnliche Auswertung mit dem Benutzer-Namespace
+            formatted_cell = cell.format(**ip.user_ns)
+            
+            # Debug-Ausgabe, falls gewünscht
+            # print(f"SQL nach F-String-Auswertung: {formatted_cell}")
+            
+            result_df = connection.execute_query(formatted_cell, database)
             ip.user_ns['df'] = result_df
             return result_df
+        except KeyError as e:
+            print(f"F-String-Fehler: Variable {e} nicht gefunden.", file=sys.stderr)
+            ip.user_ns['df'] = None
+            return None
         except Exception as e:
             print(f"Fehler bei der Ausführung der SQL-Abfrage: {e}", file=sys.stderr)
-            ip.user_ns['result'] = None
+            ip.user_ns['df'] = None
             return None
+    
+    # @register_cell_magic
+    # def sql(line, cell):
+    #     """Magic-Kommando, um SQL-Abfragen direkt auszuführen.
+        
+    #     Verwende: %%sql [database_name] in einer Zelle, gefolgt von der SQL-Abfrage.
+    #     Das Ergebnis wird sowohl zurückgegeben als auch in der globalen Variable 'result' gespeichert.
+        
+    #     Args:
+    #         line (str): Die erste Zeile nach %%sql (optional: Datenbankname)
+    #         cell (str): Der Inhalt der Zelle (SQL-Abfrage)
+            
+    #     Returns:
+    #         pandas.DataFrame: Das Ergebnis der SQL-Abfrage
+    #     """
+    #     # Nutze den globalen result im Benutzernamespace
+    #     database = line.strip() if line.strip() else None
+    #     try:
+    #         result_df = connection.execute_query(cell, database)
+    #         ip.user_ns['df'] = result_df
+    #         return result_df
+    #     except Exception as e:
+    #         print(f"Fehler bei der Ausführung der SQL-Abfrage: {e}", file=sys.stderr)
+    #         ip.user_ns['result'] = None
+    #         return None
     
     # Magic registrieren
     ip.register_magic_function(sql, 'cell')
@@ -88,6 +125,6 @@ def load_sql_magic(connection):
         ip.set_hook('complete_command', sql_completer, re_key='.*%sql.*')
 
     print("SQL-Magic wurde aktiviert. Du kannst jetzt %%sql [database] in Zellen verwenden.")
-    print("Das Abfrageergebnis wird in der globalen Variable 'result' gespeichert.")
+    print("Das Abfrageergebnis wird in der globalen Variable 'df' gespeichert.")
     
     return #sql
